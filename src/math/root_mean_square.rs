@@ -19,6 +19,15 @@ where
     }
 }
 
+impl<A, const L: usize> Default for RootMeanSquareBuilder<A, L>
+where
+    A: Send + 'static + Copy,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const L: usize> RootMeanSquareBuilder<f32, L> {
     pub fn build(self) -> Block {
         let mut y_n_1_pow2 = 0.0f32;

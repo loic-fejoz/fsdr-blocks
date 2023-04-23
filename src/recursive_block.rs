@@ -28,6 +28,7 @@ where
     B: Send + 'static + Default + Copy,
     F: FnMut(&A, &B) -> (B, B) + Send + 'static,
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(f: F) -> Block {
         Block::new(
             BlockMetaBuilder::new("RecursiveBlock").build(),

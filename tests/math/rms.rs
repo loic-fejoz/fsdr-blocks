@@ -27,14 +27,14 @@ fn rms_dc_f32() -> Result<()> {
     let sink = Sink::new(move |x: &f32| {
         counter += 1;
         if counter > 10 {
-            assert!((x - A).abs() < 0.0000001);
+            assert!((x - A).abs() < 0.0000001, "Expected {A:?}, actual {x:?}");
         }
     });
 
     connect!(fg,
         src > rms > sink;
     );
-    fg = Runtime::new().run(fg)?;
+    let _fg = Runtime::new().run(fg)?;
 
     Ok(())
 }
@@ -65,7 +65,10 @@ fn rms_sine_f32() -> Result<()> {
         if counter > WINDOW_SIZE {
             let mut tested = tested_for_check.lock().unwrap();
             *tested = true;
-            assert!((x - expected).abs() < 0.01);
+            assert!(
+                (x - expected).abs() < 0.01,
+                "Expected {expected:?}, actual {x:?}"
+            );
         }
     });
 
@@ -81,7 +84,7 @@ fn rms_sine_f32() -> Result<()> {
         let _ = fg.await;
     });
     let tested = tested.lock().unwrap();
-    assert_eq!(true, *tested); // Ensure we run sufficiently enough to do some actual test
+    assert!(*tested); // Ensure we run sufficiently enough to do some actual test
 
     Ok(())
 }
@@ -113,7 +116,10 @@ fn rms_square_f32() -> Result<()> {
         if counter > 3 * WINDOW_SIZE {
             let mut tested = tested_for_check.lock().unwrap();
             *tested = true;
-            assert!((x - expected).abs() < 0.01);
+            assert!(
+                (x - expected).abs() < 0.01,
+                "Expected {expected:?}, actual {x:?}"
+            );
         }
     });
 
@@ -129,7 +135,7 @@ fn rms_square_f32() -> Result<()> {
         let _ = fg.await;
     });
     let tested = tested.lock().unwrap();
-    assert_eq!(true, *tested); // Ensure we run sufficiently enough to do some actual test
+    assert!(*tested); // Ensure we run sufficiently enough to do some actual test
 
     Ok(())
 }
@@ -155,12 +161,15 @@ fn rms_sine_c32() -> Result<()> {
     let tested_for_check = Arc::clone(&tested);
     let tested = Arc::clone(&tested);
     let sink = Sink::new(move |x: &f32| {
-        //println!("{x}");
+        println!("{x}");
         counter += 1;
         if counter > WINDOW_SIZE {
             let mut tested = tested_for_check.lock().unwrap();
             *tested = true;
-            assert!((x - expected).abs() < 0.01);
+            assert!(
+                (x - expected).abs() < 0.01,
+                "Expected {expected:?}, actual {x:?}"
+            );
         }
     });
 
@@ -176,7 +185,7 @@ fn rms_sine_c32() -> Result<()> {
         let _ = fg.await;
     });
     let tested = tested.lock().unwrap();
-    assert_eq!(true, *tested); // Ensure we run sufficiently enough to do some actual test
+    assert!(*tested); // Ensure we run sufficiently enough to do some actual test
 
     Ok(())
 }
