@@ -5,6 +5,8 @@
 pub extern crate async_trait;
 
 pub mod math;
+mod recursive_block;
 pub mod stdinout;
 pub mod stream;
 pub mod type_converters;
+pub use recursive_block::RecursiveBlock;
