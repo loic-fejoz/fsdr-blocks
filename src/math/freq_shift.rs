@@ -9,6 +9,7 @@ use futuresdr::runtime::MessageIo;
 use futuresdr::runtime::MessageIoBuilder;
 use futuresdr::runtime::StreamIo;
 use futuresdr::runtime::StreamIoBuilder;
+use futuresdr::runtime::TypedBlock;
 use futuresdr::runtime::WorkIo;
 
 /// This blocks shift the signal in the frequency domain based on the [`NCO`] implementation.
@@ -43,6 +44,26 @@ where
             2.0 * core::f32::consts::PI * frequency / sample_rate,
         );
         Block::new(
+            BlockMetaBuilder::new("FrequencyShift").build(),
+            StreamIoBuilder::new()
+                .add_input::<A>("in")
+                .add_output::<A>("out")
+                .build(),
+            MessageIoBuilder::<Self>::new().build(),
+            FrequencyShifter {
+                _p1: std::marker::PhantomData,
+                nco,
+            },
+        )
+    }
+
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new_typed(frequency: f32, sample_rate: f32) -> TypedBlock<FrequencyShifter<A>> {
+        let nco = NCO::new(
+            0.0f32,
+            2.0 * core::f32::consts::PI * frequency / sample_rate,
+        );
+        TypedBlock::new(
             BlockMetaBuilder::new("FrequencyShift").build(),
             StreamIoBuilder::new()
                 .add_input::<A>("in")
@@ -118,5 +139,68 @@ impl Kernel for FrequencyShifter<Complex32> {
         }
 
         Ok(())
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use super::*;
+    use test::Bencher;
+
+    fn bench_freq_shifter_c32<const N: usize>(b: &mut Bencher, data: Vec<Complex32>)
+    {
+        let freq_shifter = FrequencyShifter::<Complex32>::new_typed(440.0, 48000.0);
+        let mut mocker = futuresdr::runtime::Mocker::new(freq_shifter);
+        
+        b.iter(|| {
+            mocker.input::<Complex32>(0, data.to_owned());
+            mocker.init_output::<Complex32>(0, N);
+
+            mocker.run();
+        });
+    }
+
+    #[bench]
+    fn bench_freq_shifter_c32_1024_same(b: &mut Bencher) {
+        let some_data = vec![Complex32::new(1.0, 0.5); 1024];
+        bench_freq_shifter_c32::<1024>(b, some_data);
+    }
+
+    // #[bench]
+    // fn bench_freq_shifter_c32_512_same(b: &mut Bencher) {
+    //     let some_data = vec![Complex32::new(1.0, 0.5); 512];
+    //     bench_freq_shifter_c32::<512>(b, some_data);
+    // }
+
+    // #[bench]
+    // fn bench_freq_shifter_c32_2048_same(b: &mut Bencher) {
+    //     let some_data = vec![Complex32::new(1.0, 0.5); 2048];
+    //     bench_freq_shifter_c32::<2048>(b, some_data);
+    // }
+
+    // #[bench]
+    // fn bench_freq_shifter_c32_4096_same(b: &mut Bencher) {
+    //     let some_data = vec![Complex32::new(1.0, 0.5); 4096];
+    //     bench_freq_shifter_c32::<4096>(b, some_data);
+    // }
+
+    #[bench]
+    fn bench_freq_shifter_f32_1024(b: &mut Bencher) {
+        let freq_shifter = FrequencyShifter::<f32>::new_typed(440.0, 48000.0);
+        let mut mocker = futuresdr::runtime::Mocker::new(freq_shifter);
+
+        
+        
+        b.iter(|| {
+            let some_data = vec![1.0f32; 1024];
+            mocker.input::<f32>(0, some_data);
+            mocker.init_output::<f32>(0, 1024);
+
+            mocker.run();
+            // freq_shifter.work(io, sio, mio, meta)
+
+        });
     }
 }
