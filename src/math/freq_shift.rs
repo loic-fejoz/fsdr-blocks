@@ -142,23 +142,23 @@ impl Kernel for FrequencyShifter<Complex32> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
+    use std::hint::black_box;
     extern crate test;
     use super::*;
     use test::Bencher;
 
-    fn bench_freq_shifter_c32<const N: usize>(b: &mut Bencher, data: Vec<Complex32>)
-    {
+    fn bench_freq_shifter_c32<const N: usize>(b: &mut Bencher, data: Vec<Complex32>) {
         let freq_shifter = FrequencyShifter::<Complex32>::new_typed(440.0, 48000.0);
         let mut mocker = futuresdr::runtime::Mocker::new(freq_shifter);
-        
+
         b.iter(|| {
-            mocker.input::<Complex32>(0, data.to_owned());
+            mocker.input::<Complex32>(0, black_box(data.to_owned()));
             mocker.init_output::<Complex32>(0, N);
 
             mocker.run();
+            let _output = black_box(mocker.output::<Complex32>(0));
         });
     }
 
@@ -168,31 +168,29 @@ mod tests {
         bench_freq_shifter_c32::<1024>(b, some_data);
     }
 
-    // #[bench]
-    // fn bench_freq_shifter_c32_512_same(b: &mut Bencher) {
-    //     let some_data = vec![Complex32::new(1.0, 0.5); 512];
-    //     bench_freq_shifter_c32::<512>(b, some_data);
-    // }
+    #[bench]
+    fn bench_freq_shifter_c32_0512_same(b: &mut Bencher) {
+        let some_data = vec![Complex32::new(1.0, 0.5); 512];
+        bench_freq_shifter_c32::<512>(b, some_data);
+    }
 
-    // #[bench]
-    // fn bench_freq_shifter_c32_2048_same(b: &mut Bencher) {
-    //     let some_data = vec![Complex32::new(1.0, 0.5); 2048];
-    //     bench_freq_shifter_c32::<2048>(b, some_data);
-    // }
+    #[bench]
+    fn bench_freq_shifter_c32_2048_same(b: &mut Bencher) {
+        let some_data = vec![Complex32::new(1.0, 0.5); 2048];
+        bench_freq_shifter_c32::<2048>(b, some_data);
+    }
 
-    // #[bench]
-    // fn bench_freq_shifter_c32_4096_same(b: &mut Bencher) {
-    //     let some_data = vec![Complex32::new(1.0, 0.5); 4096];
-    //     bench_freq_shifter_c32::<4096>(b, some_data);
-    // }
+    #[bench]
+    fn bench_freq_shifter_c32_4096_same(b: &mut Bencher) {
+        let some_data = vec![Complex32::new(1.0, 0.5); 4096];
+        bench_freq_shifter_c32::<4096>(b, some_data);
+    }
 
     #[bench]
     fn bench_freq_shifter_f32_1024(b: &mut Bencher) {
         let freq_shifter = FrequencyShifter::<f32>::new_typed(440.0, 48000.0);
         let mut mocker = futuresdr::runtime::Mocker::new(freq_shifter);
 
-        
-        
         b.iter(|| {
             let some_data = vec![1.0f32; 1024];
             mocker.input::<f32>(0, some_data);
@@ -200,7 +198,6 @@ mod tests {
 
             mocker.run();
             // freq_shifter.work(io, sio, mio, meta)
-
         });
     }
 }
