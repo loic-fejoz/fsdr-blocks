@@ -11,6 +11,7 @@ pub mod channel;
 pub mod cw;
 
 pub mod math;
+pub mod modulators;
 pub mod stdinout;
 pub mod stream;
 pub mod synchronizers;
