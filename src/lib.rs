@@ -13,4 +13,5 @@ pub mod cw;
 pub mod math;
 pub mod stdinout;
 pub mod stream;
+pub mod synchronizers;
 pub mod type_converters;
