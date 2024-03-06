@@ -20,9 +20,9 @@ members = [
 ]
 
 [dependencies]
-futuresdr = { git = "https://github.com/FutureSDR/FutureSDR", branch = "main" }
-#futuresdr = { path = "../FutureSDR" }
-async-trait = "0.1.68"
+# futuresdr = { git = "https://github.com/FutureSDR/FutureSDR", branch = "main", features=["audio"] }
+futuresdr = { path = "../FutureSDR", features=["audio"] }
+async-trait = "0.1"
 crossbeam-channel = { version = "0.5.8", optional = true }
 bimap = { version = "0.6.3", optional = true }
 sigmf = { version = "0.1.0", path = "crates/sigmf" }

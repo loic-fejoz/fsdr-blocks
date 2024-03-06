@@ -83,7 +83,7 @@ impl StdInOutBuilder<u8> {
         match self.direction {
             StdDirection::Out => {
                 let mut stdout = std::io::stdout();
-                Sink::new(move |f: &i16| {
+                Sink::new(move |f: &u8| {
                     stdout
                         .write_all(&f.to_ne_bytes())
                         .expect("cannot write to stdout");
