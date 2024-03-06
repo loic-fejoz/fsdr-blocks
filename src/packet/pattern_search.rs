@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use futuresdr::anyhow::Result;
 // use futuresdr::anyhow::Result;
+use futuresdr::log::debug;
 use futuresdr::runtime::Block;
 use futuresdr::runtime::BlockMeta;
 use futuresdr::runtime::BlockMetaBuilder;
@@ -95,12 +96,15 @@ impl Kernel for PatternSearch<u8> {
                 }
             }
             State::SEARCHING(potential_idx) => {
+                let mut potential_idx: VecDeque<bool> = potential_idx.clone();
                 let mut next_state = State::SEARCHING(potential_idx.clone());
                 for input in i.iter() {
                     m += 1;
-                    potential_idx.push_front(*input == self.pattern_values[0]);
+                    potential_idx.push_front(true);
+                    // println!("before {:02x}: {:?}", input.clone(), potential_idx);
+                    // let _x = potential_idx.as_slices();
                     // Evaluate new active states
-                    let potential_idx: VecDeque<bool> = potential_idx
+                    potential_idx = potential_idx.make_contiguous()
                         .iter()
                         .zip(self.pattern_values.iter())
                         .map(|(previous, expected_value)|
@@ -109,13 +113,15 @@ impl Kernel for PatternSearch<u8> {
                             (*expected_value == *input) & previous
                         )
                         .collect();
+                    // let _x = potential_idx.as_slices();
+                    // println!("after: {:?}", potential_idx);
                     assert!(!potential_idx.is_empty());
                     let is_last_state_active = *potential_idx.iter().last().expect("");
                     if is_last_state_active {
                         next_state = State::DUMPING(self.values_after);
                         break;
                     } else {
-                        next_state = State::SEARCHING(potential_idx)
+                        next_state = State::SEARCHING(potential_idx.clone())
                     }
                 }
                 sio.input(0).consume(m);
