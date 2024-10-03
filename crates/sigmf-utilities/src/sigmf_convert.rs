@@ -5,6 +5,7 @@ use fsdr_blocks::{
     sigmf::{SigMFSinkBuilder, SigMFSourceBuilder},
     type_converters::TypeConvertersBuilder,
 };
+use fsdr_blocks::futuresdr as futuresdr;
 use futuresdr::blocks::TagDebug;
 use futuresdr::macros::connect;
 use futuresdr::{

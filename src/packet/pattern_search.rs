@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use futuresdr::anyhow::Result;
 // use futuresdr::anyhow::Result;
-use futuresdr::log::debug;
 use futuresdr::runtime::Block;
 use futuresdr::runtime::BlockMeta;
 use futuresdr::runtime::BlockMetaBuilder;
