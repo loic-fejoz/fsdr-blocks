@@ -86,3 +86,8 @@ harness = false
 name = "freq_shift"
 path = "benches/math/freq_shift.rs"
 harness = false
+
+[[bench]]
+name = "agc"
+path = "benches/agc.rs"
+harness = false
