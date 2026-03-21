@@ -2,11 +2,11 @@ use futuresdr::num_complex::{Complex32, ComplexFloat};
 use futuresdr::prelude::*;
 
 #[cfg(feature = "simd")]
-use core::simd::Select;
-#[cfg(feature = "simd")]
 use core::simd::num::SimdFloat;
 #[cfg(feature = "simd")]
 use core::simd::prelude::*;
+#[cfg(feature = "simd")]
+use core::simd::Select;
 
 /// Automatic Gain Control Block
 #[derive(Block)]
@@ -145,6 +145,7 @@ where
 }
 
 pub trait AgcSupported: Copy {
+    #[allow(clippy::too_many_arguments)]
     fn process(
         gain: &mut f32,
         gain_lock: &mut bool,
@@ -158,6 +159,7 @@ pub trait AgcSupported: Copy {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn agc_scalar_logic<T>(
     gain: &mut f32,
     gain_lock: &mut bool,
@@ -316,11 +318,8 @@ impl AgcSupported for f32 {
                 *gain += error * adj_rate * (*gain);
                 *gain = gain.max(0.0);
 
-                if auto_lock {
-                    // Simplified auto-lock: check if average power is close enough
-                    if (avg_out_power - reference_power).abs() < 0.01 * reference_power {
-                        *gain_lock = true;
-                    }
+                if auto_lock && (avg_out_power - reference_power).abs() < 0.01 * reference_power {
+                    *gain_lock = true;
                 }
             }
         }
@@ -368,8 +367,7 @@ impl AgcSupported for Complex32 {
         };
 
         let i_f32 = unsafe { core::slice::from_raw_parts(input.as_ptr() as *const f32, n * 2) };
-        let o_f32 =
-            unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr() as *mut f32, n * 2) };
+        let o_f32 = unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr() as *mut f32, n * 2) };
 
         for i in 0..n_simd {
             let v0 = f32x8::from_slice(&i_f32[i * LANES * 2..]);
@@ -397,10 +395,8 @@ impl AgcSupported for Complex32 {
                 *gain += error * adj_rate * (*gain);
                 *gain = gain.max(0.0);
 
-                if auto_lock {
-                    if (avg_out_power - reference_power).abs() < 0.01 * reference_power {
-                        *gain_lock = true;
-                    }
+                if auto_lock && (avg_out_power - reference_power).abs() < 0.01 * reference_power {
+                    *gain_lock = true;
                 }
             }
         }
@@ -425,14 +421,7 @@ impl AgcSupported for Complex32 {
 #[doc(hidden)]
 impl<T, I, O> Kernel for Agc<T, I, O>
 where
-    T: Send
-        + Sync
-        + ComplexFloat<Real = f32>
-        + Default
-        + std::fmt::Debug
-        + Copy
-        + 'static
-        + AgcSupported,
+    T: Send + Sync + ComplexFloat<Real = f32> + Default + std::fmt::Debug + Copy + 'static + AgcSupported,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -490,14 +479,7 @@ pub struct AgcBuilder<T> {
 
 impl<T> AgcBuilder<T>
 where
-    T: Send
-        + Sync
-        + ComplexFloat<Real = f32>
-        + Default
-        + std::fmt::Debug
-        + Copy
-        + 'static
-        + AgcSupported,
+    T: Send + Sync + ComplexFloat<Real = f32> + Default + std::fmt::Debug + Copy + 'static + AgcSupported,
 {
     pub fn new() -> AgcBuilder<T> {
         AgcBuilder {
@@ -559,14 +541,7 @@ where
 
 impl<T> Default for AgcBuilder<T>
 where
-    T: Send
-        + Sync
-        + ComplexFloat<Real = f32>
-        + Default
-        + std::fmt::Debug
-        + Copy
-        + 'static
-        + AgcSupported,
+    T: Send + Sync + ComplexFloat<Real = f32> + Default + std::fmt::Debug + Copy + 'static + AgcSupported,
 {
     fn default() -> Self {
         Self::new()
