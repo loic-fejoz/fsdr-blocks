@@ -98,3 +98,58 @@ fn agc_gain_lock_f32() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn agc_compare_linear_vs_log10() -> Result<()> {
+    let n_samp = 5000; // More samples for better convergence comparison
+    let input: Vec<f32> = vec![0.2; n_samp];
+    let reference_power = 1.0f32;
+    let adjustment_rate = 0.01f32;
+
+    // Linear implementation (current)
+    let mut gain_lin = 1.0f32;
+    let mut out_lin = vec![0.0f32; n_samp];
+    for i in 0..n_samp {
+        let out = input[i] * gain_lin;
+        let output_power = out.powi(2);
+        let error = (reference_power - output_power) / reference_power;
+        gain_lin += error * adjustment_rate * gain_lin;
+        out_lin[i] = out;
+    }
+
+    // Log10 implementation (reference)
+    let mut gain_log = 1.0f32;
+    let mut out_log = vec![0.0f32; n_samp];
+    for i in 0..n_samp {
+        let out = input[i] * gain_log;
+        let output_power = out.powi(2);
+        gain_log *= 1.0 + (reference_power / output_power).log10() * adjustment_rate;
+        out_log[i] = out;
+    }
+
+    // Both should converge to ~1.0 (power 1.0 => amplitude 1.0)
+    assert!(
+        (out_lin[n_samp - 1].abs() - 1.0).abs() < 0.05,
+        "Linear implementation failed to converge (last val: {})",
+        out_lin[n_samp - 1]
+    );
+    assert!(
+        (out_log[n_samp - 1].abs() - 1.0).abs() < 0.05,
+        "Log10 implementation failed to converge (last val: {})",
+        out_log[n_samp - 1]
+    );
+
+    // They track each other. Near steady state, the difference should be minimal.
+    // The transient (start) will differ because log10 is non-linear.
+    for i in (n_samp - 100)..n_samp {
+        assert!(
+            (out_lin[i] - out_log[i]).abs() < 0.05,
+            "Implementations diverged at sample {}: linear={}, log={}",
+            i,
+            out_lin[i],
+            out_log[i]
+        );
+    }
+
+    Ok(())
+}
