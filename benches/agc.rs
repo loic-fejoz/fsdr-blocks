@@ -13,7 +13,8 @@ pub fn agc_f32(c: &mut Criterion) {
 
     group.bench_function("agc_f32", |b| {
         b.iter(|| {
-            let block: Agc<f32, Reader<f32>, Writer<f32>> = Agc::new(0.0, 100.0, 1.0, 0.01, 1.0, false, false);
+            let block: Agc<f32, Reader<f32>, Writer<f32>> =
+                Agc::new(0.0, 100.0, 1.0, 0.01, 1.0, false, false);
             let mut mocker = Mocker::new(block);
             mocker.input().set(input.clone());
             mocker.run();

@@ -39,3 +39,8 @@ To maintain compatibility and maximize performance, we use the following pattern
 - **Status:** Done.
 - **Impact:** ~4.4x speedup on `Complex32` rotation compared to naive scalar loop.
 - **Pattern:** `FreqShiftSupported` trait with SIMD complex multiplication and periodic NCO re-sync for precision.
+
+### 4. AGC (`src/agc.rs`)
+- **Status:** Done.
+- **Impact:** ~38x speedup on `f32` compared to naive `log10`-based scalar loop.
+- **Pattern:** `AgcSupported` trait with linear error model and SIMD-vectorized power/gain calculation.

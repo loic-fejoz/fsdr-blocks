@@ -5,8 +5,8 @@ mod channel;
 #[cfg(feature = "cw")]
 mod cw;
 
-mod math;
 mod agc;
+mod math;
 mod serde_pmt;
 mod sigmf;
 mod stream;

@@ -32,7 +32,11 @@ fn agc_convergence_f32() -> Result<()> {
     // After some time, output amplitude should be close to 1.0 (power 1.0)
     let last_vals = &v[v.len() - 10..];
     for &val in last_vals {
-        assert!((val.abs() - 1.0).abs() < 0.1, "Value {} not converged to ~1.0", val);
+        assert!(
+            (val.abs() - 1.0).abs() < 0.1,
+            "Value {} not converged to ~1.0",
+            val
+        );
     }
 
     Ok(())

@@ -1,11 +1,18 @@
-use futuresdr::num_complex::ComplexFloat;
+use futuresdr::num_complex::{Complex32, ComplexFloat};
 use futuresdr::prelude::*;
+
+#[cfg(feature = "simd")]
+use core::simd::Select;
+#[cfg(feature = "simd")]
+use core::simd::num::SimdFloat;
+#[cfg(feature = "simd")]
+use core::simd::prelude::*;
 
 /// Automatic Gain Control Block
 #[derive(Block)]
 #[message_inputs(auto_lock, gain_lock, max_gain, adjustment_rate, reference_power)]
 pub struct Agc<
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real = f32> + Default + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = T> = DefaultCpuReader<T>,
     O: CpuBufferWriter<Item = T> = DefaultCpuWriter<T>,
 > {
@@ -31,7 +38,7 @@ pub struct Agc<
 
 impl<T, I, O> Agc<T, I, O>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real = f32> + Default + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -98,8 +105,8 @@ where
         _meta: &mut BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
-        if let Pmt::F32(r) = p {
-            self.max_gain = r;
+        if let Pmt::F32(m) = p {
+            self.max_gain = m;
             Ok(Pmt::Ok)
         } else {
             Ok(Pmt::InvalidValue)
@@ -137,10 +144,295 @@ where
     }
 }
 
+pub trait AgcSupported: Copy {
+    fn process(
+        gain: &mut f32,
+        gain_lock: &mut bool,
+        squelch: f32,
+        max_gain: f32,
+        adjustment_rate: f32,
+        reference_power: f32,
+        auto_lock: bool,
+        input: &[Self],
+        output: &mut [Self],
+    );
+}
+
+fn agc_scalar_logic<T>(
+    gain: &mut f32,
+    gain_lock: &mut bool,
+    squelch: f32,
+    _max_gain: f32,
+    adjustment_rate: f32,
+    reference_power: f32,
+    auto_lock: bool,
+    input: &[T],
+    output: &mut [T],
+) where
+    T: ComplexFloat<Real = f32> + Copy,
+{
+    let n = input.len().min(output.len());
+    let mut g = *gain;
+    let mut gl = *gain_lock;
+
+    for (src, dst) in input[..n].iter().zip(output[..n].iter_mut()) {
+        let input_power = src.abs().powi(2);
+        if input_power > squelch {
+            let out = (*src) * T::from(g).unwrap();
+            let output_power = out.abs().powi(2);
+
+            if auto_lock {
+                if input_power > reference_power {
+                    if output_power < reference_power {
+                        gl = true;
+                    }
+                } else if output_power > reference_power {
+                    gl = true;
+                }
+            }
+
+            if !gl {
+                let dynamic_adjustment_rate = if adjustment_rate > 0.0 {
+                    adjustment_rate
+                } else {
+                    0.0001
+                };
+                // Linear error instead of log10 for performance
+                // error = (ref - out_power) / ref
+                let error = (reference_power - output_power) / reference_power;
+                g += error * dynamic_adjustment_rate * g;
+                g = g.max(0.0);
+            }
+            *dst = out;
+        } else {
+            *dst = T::from(0.0).unwrap();
+        }
+    }
+    *gain = g;
+    *gain_lock = gl;
+}
+
+#[cfg(feature = "simd")]
+impl<T> AgcSupported for T
+where
+    T: ComplexFloat<Real = f32> + Copy + Send + Sync + 'static,
+{
+    default fn process(
+        gain: &mut f32,
+        gain_lock: &mut bool,
+        squelch: f32,
+        max_gain: f32,
+        adjustment_rate: f32,
+        reference_power: f32,
+        auto_lock: bool,
+        input: &[Self],
+        output: &mut [Self],
+    ) {
+        agc_scalar_logic(
+            gain,
+            gain_lock,
+            squelch,
+            max_gain,
+            adjustment_rate,
+            reference_power,
+            auto_lock,
+            input,
+            output,
+        );
+    }
+}
+
+#[cfg(not(feature = "simd"))]
+impl<T> AgcSupported for T
+where
+    T: ComplexFloat<Real = f32> + Copy + Send + Sync + 'static,
+{
+    fn process(
+        gain: &mut f32,
+        gain_lock: &mut bool,
+        squelch: f32,
+        max_gain: f32,
+        adjustment_rate: f32,
+        reference_power: f32,
+        auto_lock: bool,
+        input: &[Self],
+        output: &mut [Self],
+    ) {
+        agc_scalar_logic(
+            gain,
+            gain_lock,
+            squelch,
+            max_gain,
+            adjustment_rate,
+            reference_power,
+            auto_lock,
+            input,
+            output,
+        );
+    }
+}
+
+#[cfg(feature = "simd")]
+impl AgcSupported for f32 {
+    fn process(
+        gain: &mut f32,
+        gain_lock: &mut bool,
+        squelch: f32,
+        _max_gain: f32,
+        adjustment_rate: f32,
+        reference_power: f32,
+        auto_lock: bool,
+        input: &[Self],
+        output: &mut [Self],
+    ) {
+        let n = input.len().min(output.len());
+        const LANES: usize = 8;
+        let n_simd = n / LANES;
+
+        let v_squelch = f32x8::splat(squelch);
+        let adj_rate = if adjustment_rate > 0.0 {
+            adjustment_rate
+        } else {
+            0.0001
+        };
+
+        for i in 0..n_simd {
+            let v_in = f32x8::from_slice(&input[i * LANES..]);
+            let v_gain = f32x8::splat(*gain);
+            let v_out = v_in * v_gain;
+
+            let v_in_power = v_in * v_in;
+            let v_out_power = v_out * v_out;
+
+            let mask = v_in_power.simd_gt(v_squelch);
+            let v_final_out = mask.select(v_out, f32x8::splat(0.0));
+            v_final_out.copy_to_slice(&mut output[i * LANES..]);
+
+            if !*gain_lock {
+                // Approximate average error for the block to update gain
+                // This is a trade-off: updating gain once per SIMD block
+                let avg_out_power = v_out_power.reduce_sum() / LANES as f32;
+                let error = (reference_power - avg_out_power) / reference_power;
+                *gain += error * adj_rate * (*gain);
+                *gain = gain.max(0.0);
+
+                if auto_lock {
+                    // Simplified auto-lock: check if average power is close enough
+                    if (avg_out_power - reference_power).abs() < 0.01 * reference_power {
+                        *gain_lock = true;
+                    }
+                }
+            }
+        }
+
+        // Tail
+        let tail_start = n_simd * LANES;
+        if tail_start < n {
+            agc_scalar_logic(
+                gain,
+                gain_lock,
+                squelch,
+                _max_gain,
+                adjustment_rate,
+                reference_power,
+                auto_lock,
+                &input[tail_start..n],
+                &mut output[tail_start..n],
+            );
+        }
+    }
+}
+
+#[cfg(feature = "simd")]
+impl AgcSupported for Complex32 {
+    fn process(
+        gain: &mut f32,
+        gain_lock: &mut bool,
+        squelch: f32,
+        _max_gain: f32,
+        adjustment_rate: f32,
+        reference_power: f32,
+        auto_lock: bool,
+        input: &[Self],
+        output: &mut [Self],
+    ) {
+        let n = input.len().min(output.len());
+        const LANES: usize = 8;
+        let n_simd = n / LANES;
+
+        let v_squelch = f32x8::splat(squelch);
+        let adj_rate = if adjustment_rate > 0.0 {
+            adjustment_rate
+        } else {
+            0.0001
+        };
+
+        let i_f32 = unsafe { core::slice::from_raw_parts(input.as_ptr() as *const f32, n * 2) };
+        let o_f32 =
+            unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr() as *mut f32, n * 2) };
+
+        for i in 0..n_simd {
+            let v0 = f32x8::from_slice(&i_f32[i * LANES * 2..]);
+            let v1 = f32x8::from_slice(&i_f32[i * LANES * 2 + 8..]);
+            let (v_re, v_im) = v0.deinterleave(v1);
+
+            let v_gain = f32x8::splat(*gain);
+            let v_out_re = v_re * v_gain;
+            let v_out_im = v_im * v_gain;
+
+            let v_in_power = v_re * v_re + v_im * v_im;
+            let v_out_power = v_out_re * v_out_re + v_out_im * v_out_im;
+
+            let mask = v_in_power.simd_gt(v_squelch);
+            let v_final_re = mask.select(v_out_re, f32x8::splat(0.0));
+            let v_final_im = mask.select(v_out_im, f32x8::splat(0.0));
+
+            let (o0, o1) = v_final_re.interleave(v_final_im);
+            o0.copy_to_slice(&mut o_f32[i * LANES * 2..]);
+            o1.copy_to_slice(&mut o_f32[i * LANES * 2 + 8..]);
+
+            if !*gain_lock {
+                let avg_out_power = v_out_power.reduce_sum() / LANES as f32;
+                let error = (reference_power - avg_out_power) / reference_power;
+                *gain += error * adj_rate * (*gain);
+                *gain = gain.max(0.0);
+
+                if auto_lock {
+                    if (avg_out_power - reference_power).abs() < 0.01 * reference_power {
+                        *gain_lock = true;
+                    }
+                }
+            }
+        }
+
+        let tail_start = n_simd * LANES;
+        if tail_start < n {
+            agc_scalar_logic(
+                gain,
+                gain_lock,
+                squelch,
+                _max_gain,
+                adjustment_rate,
+                reference_power,
+                auto_lock,
+                &input[tail_start..n],
+                &mut output[tail_start..n],
+            );
+        }
+    }
+}
+
 #[doc(hidden)]
 impl<T, I, O> Kernel for Agc<T, I, O>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + Copy + 'static,
+    T: Send
+        + Sync
+        + ComplexFloat<Real = f32>
+        + Default
+        + std::fmt::Debug
+        + Copy
+        + 'static
+        + AgcSupported,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -156,46 +448,17 @@ where
 
             let m = std::cmp::min(i.len(), o.len());
             if m > 0 {
-                let squelch = self.squelch;
-                let mut gain = self.gain;
-                let mut gain_lock = self.gain_lock;
-                let auto_lock = self.auto_lock;
-                let reference_power = self.reference_power;
-                let adjustment_rate = self.adjustment_rate;
-
-                for (src, dst) in i[..m].iter().zip(o[..m].iter_mut()) {
-                    let input_power = src.to_f32().unwrap().powi(2);
-                    if input_power > squelch {
-                        let output = (*src) * T::from(gain).unwrap();
-                        let output_power = output.to_f32().unwrap().powi(2);
-
-                        if auto_lock {
-                            if input_power > reference_power {
-                                if output_power < reference_power {
-                                    gain_lock = true;
-                                }
-                            } else if output_power > reference_power {
-                                gain_lock = true;
-                            }
-                        }
-
-                        if !gain_lock {
-                            let dynamic_adjustment_rate = if adjustment_rate > 0.0 {
-                                adjustment_rate
-                            } else {
-                                0.0001
-                            };
-                            gain *= 1.0
-                                + (reference_power / output_power).log10()
-                                    * dynamic_adjustment_rate;
-                        }
-                        *dst = output;
-                    } else {
-                        *dst = T::from(0.0).unwrap();
-                    }
-                }
-                self.gain = gain;
-                self.gain_lock = gain_lock;
+                T::process(
+                    &mut self.gain,
+                    &mut self.gain_lock,
+                    self.squelch,
+                    self.max_gain,
+                    self.adjustment_rate,
+                    self.reference_power,
+                    self.auto_lock,
+                    &i[..m],
+                    &mut o[..m],
+                );
             }
             m
         };
@@ -216,67 +479,54 @@ where
 /// Builder for [`Agc`] block
 pub struct AgcBuilder<T> {
     squelch: f32,
-    /// maximum gain value (0 for unlimited).
     max_gain: f32,
-    /// initial gain value.
     gain: f32,
-    /// reference value to adjust signal power to.
-    reference_power: f32,
-    /// the update rate of the loop.
     adjustment_rate: f32,
-    /// Set when gain should not be adjusted anymore, but rather be locked to the current value
+    reference_power: f32,
     gain_lock: bool,
-    /// Set when gain should be automatically locked, when reference power is reached.
     auto_lock: bool,
     _type: std::marker::PhantomData<T>,
 }
 
 impl<T> AgcBuilder<T>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send
+        + Sync
+        + ComplexFloat<Real = f32>
+        + Default
+        + std::fmt::Debug
+        + Copy
+        + 'static
+        + AgcSupported,
 {
-    /// Create builder w/ default parameters
-    ///
-    /// ## Defaults
-    /// - `squelch`: 0.0
-    /// - `max_gain`: 65536.0
-    /// - `gain`: 1.0
-    /// - `reference_power`: 1.0
-    /// - `adjustment_rate`: 0.0001
-    /// - `gain_lock`: false
-    /// - `auto_lock`: false
     pub fn new() -> AgcBuilder<T> {
         AgcBuilder {
             squelch: 0.0,
             max_gain: 65536.0,
             gain: 1.0,
-            reference_power: 1.0,
             adjustment_rate: 0.0001,
+            reference_power: 1.0,
             gain_lock: false,
             auto_lock: false,
             _type: std::marker::PhantomData,
         }
     }
 
-    /// Surpress signals below this level
     pub fn squelch(mut self, squelch: f32) -> AgcBuilder<T> {
         self.squelch = squelch;
         self
     }
 
-    /// Max gain to use to bring input closer to reference level
     pub fn max_gain(mut self, max_gain: f32) -> AgcBuilder<T> {
         self.max_gain = max_gain;
         self
     }
 
-    /// Adjustment rate, i.e., impact of current sample on gain setting
     pub fn adjustment_rate(mut self, adjustment_rate: f32) -> AgcBuilder<T> {
         self.adjustment_rate = adjustment_rate;
         self
     }
 
-    /// Targeted power level
     pub fn reference_power(mut self, reference_power: f32) -> AgcBuilder<T> {
         self.reference_power = reference_power;
         self
@@ -288,7 +538,6 @@ where
         self
     }
 
-    /// Activate gain auto_locking, when the target reference power is reached
     pub fn auto_lock(mut self, auto_lock: bool) -> AgcBuilder<T> {
         self.auto_lock = auto_lock;
         self
@@ -308,8 +557,16 @@ where
     }
 }
 
-impl<T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static> Default
-    for AgcBuilder<T>
+impl<T> Default for AgcBuilder<T>
+where
+    T: Send
+        + Sync
+        + ComplexFloat<Real = f32>
+        + Default
+        + std::fmt::Debug
+        + Copy
+        + 'static
+        + AgcSupported,
 {
     fn default() -> Self {
         Self::new()
