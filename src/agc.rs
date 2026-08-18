@@ -1,3 +1,4 @@
+use futuresdr::futuredsp::num_traits::ToPrimitive;
 use futuresdr::num_complex::ComplexFloat;
 use futuresdr::prelude::*;
 
@@ -5,7 +6,7 @@ use futuresdr::prelude::*;
 #[derive(Block)]
 #[message_inputs(auto_lock, gain_lock, max_gain, adjustment_rate, reference_power)]
 pub struct Agc<
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = T> = DefaultCpuReader<T>,
     O: CpuBufferWriter<Item = T> = DefaultCpuWriter<T>,
 > {
@@ -31,7 +32,7 @@ pub struct Agc<
 
 impl<T, I, O> Agc<T, I, O>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -140,7 +141,7 @@ where
 #[doc(hidden)]
 impl<T, I, O> Kernel for Agc<T, I, O>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + Copy + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + Copy + 'static,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -157,6 +158,7 @@ where
             let m = std::cmp::min(i.len(), o.len());
             if m > 0 {
                 let squelch = self.squelch;
+                let max_gain = self.max_gain;
                 let mut gain = self.gain;
                 let mut gain_lock = self.gain_lock;
                 let auto_lock = self.auto_lock;
@@ -164,10 +166,12 @@ where
                 let adjustment_rate = self.adjustment_rate;
 
                 for (src, dst) in i[..m].iter().zip(o[..m].iter_mut()) {
-                    let input_power = src.to_f32().unwrap().powi(2);
+                    let src_abs = src.abs().to_f32().unwrap_or(0.0);
+                    let input_power = src_abs * src_abs;
                     if input_power > squelch {
                         let output = (*src) * T::from(gain).unwrap();
-                        let output_power = output.to_f32().unwrap().powi(2);
+                        let out_abs = output.abs().to_f32().unwrap_or(0.0);
+                        let output_power = (out_abs * out_abs).max(f32::EPSILON);
 
                         if auto_lock {
                             if input_power > reference_power {
@@ -188,6 +192,7 @@ where
                             gain *= 1.0
                                 + (reference_power / output_power).log10()
                                     * dynamic_adjustment_rate;
+                            gain = gain.clamp(0.0, max_gain);
                         }
                         *dst = output;
                     } else {
@@ -276,6 +281,17 @@ where
         self
     }
 
+    /// Set initial gain value
+    pub fn gain(mut self, gain: f32) -> AgcBuilder<T> {
+        self.gain = gain;
+        self
+    }
+
+    /// Set initial gain value (alias for gain)
+    pub fn initial_gain(self, gain: f32) -> AgcBuilder<T> {
+        self.gain(gain)
+    }
+
     /// Targeted power level
     pub fn reference_power(mut self, reference_power: f32) -> AgcBuilder<T> {
         self.reference_power = reference_power;
@@ -308,7 +324,7 @@ where
     }
 }
 
-impl<T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static> Default
+impl<T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static> Default
     for AgcBuilder<T>
 {
     fn default() -> Self {

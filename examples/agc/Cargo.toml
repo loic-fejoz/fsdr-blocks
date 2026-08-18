@@ -8,5 +8,5 @@ edition = "2024"
 #path = "main"
 
 [dependencies]
-futuresdr = { git = "https://github.com/FutureSDR/FutureSDR", branch = "main", version = "0.0.40-dev", features = ["audio"] }
+futuresdr = { workspace = true, features = ["audio"] }
 fsdr-blocks = { path = "../../" }

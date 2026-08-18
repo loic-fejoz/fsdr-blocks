@@ -10,7 +10,7 @@ use futuresdr::prelude::*;
 /// ```
 #[derive(Block)]
 pub struct Deinterleave<
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static + Copy,
+    A: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A> = DefaultCpuReader<A>,
     O0: CpuBufferWriter<Item = A> = DefaultCpuWriter<A>,
     O1: CpuBufferWriter<Item = A> = DefaultCpuWriter<A>,
@@ -26,7 +26,7 @@ pub struct Deinterleave<
 
 impl<A, I, O0, O1> Deinterleave<A, I, O0, O1>
 where
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static + Copy,
+    A: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A>,
     O0: CpuBufferWriter<Item = A>,
     O1: CpuBufferWriter<Item = A>,
@@ -43,7 +43,7 @@ where
 
 impl<A, I, O0, O1> Default for Deinterleave<A, I, O0, O1>
 where
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static + Copy,
+    A: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A>,
     O0: CpuBufferWriter<Item = A>,
     O1: CpuBufferWriter<Item = A>,
@@ -56,7 +56,7 @@ where
 #[doc(hidden)]
 impl<A, I, O0, O1> Kernel for Deinterleave<A, I, O0, O1>
 where
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static + Copy,
+    A: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A>,
     O0: CpuBufferWriter<Item = A>,
     O1: CpuBufferWriter<Item = A>,

@@ -40,7 +40,7 @@ fn test_cw_to_char_vector() -> Result<()> {
         received.len(),
         received
     );*/
-    assert_eq!(vec!['S', ' ', 'O', '_', ' ', ' ', 'S'], received);
+    assert_eq!(vec!['S', ' ', 'O', '_', '_', 'S', ' ', ' ', 'S'], received);
 
     Ok(())
 }
@@ -91,7 +91,7 @@ fn test_cw_to_char_channel() -> Result<()> {
         received.len(),
         received
     );*/
-    assert_eq!(vec!['S', ' ', 'O', '_', 'S'], received);
+    assert_eq!(vec!['S', ' ', 'O', '_', '_', 'S', 'S'], received);
 
     Ok(())
 }

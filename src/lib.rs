@@ -1,8 +1,6 @@
 //! This library acts as a toolbox on top of [FutureSDR][`futuresdr`] to easily build your own flowgraph.
 //! It is made by the community for the community.
 
-// #![feature(async_fn_in_trait)]
-
 #[cfg(feature = "crossbeam")]
 pub mod channel;
 
