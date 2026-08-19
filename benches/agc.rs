@@ -24,6 +24,7 @@ pub fn bench_agc_f32(c: &mut Criterion) {
         });
     });
 
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     let input_c32: Vec<Complex32> = input
         .chunks_exact(2)
         .map(|chunk| Complex32::new(chunk[0], chunk[1]))

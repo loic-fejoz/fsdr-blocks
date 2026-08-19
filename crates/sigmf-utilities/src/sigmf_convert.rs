@@ -33,32 +33,27 @@ impl Cli {
             RI8 => {
                 let conv = TypeConvertersBuilder::lossy_scale_convert_f32_i8().build();
                 let snk = snk.datatype(self.target).build::<i8>().await?;
-                let src_ref = src.clone();
-                connect!(fg, src_ref > conv > snk);
+                connect!(fg, src > conv > snk);
             }
             RU8 => {
                 let conv = TypeConvertersBuilder::lossy_scale_convert_f32_u8().build();
                 let snk = snk.datatype(self.target).build::<u8>().await?;
-                let src_ref = src.clone();
-                connect!(fg, src_ref > conv > snk);
+                connect!(fg, src > conv > snk);
             }
             Rf32Be | Rf32Le => {
                 let conv: Apply<fn(&f32) -> f32, f32, f32> = Apply::new(|x: &f32| *x);
                 let snk = snk.datatype(self.target).build::<f32>().await?;
-                let src_ref = src.clone();
-                connect!(fg, src_ref > conv > snk);
+                connect!(fg, src > conv > snk);
             }
             Rf64Be | Rf64Le => {
                 let conv = TypeConvertersBuilder::convert::<f32, f64>().build();
                 let snk = snk.datatype(self.target).build::<f64>().await?;
-                let src_ref = src.clone();
-                connect!(fg, src_ref > conv > snk);
+                connect!(fg, src > conv > snk);
             }
             Ri16Be | Ri16Le => {
                 let conv = TypeConvertersBuilder::lossy_scale_convert_f32_i16().build();
                 let snk = snk.datatype(self.target).build::<i16>().await?;
-                let src_ref = src.clone();
-                connect!(fg, src_ref > conv > snk);
+                connect!(fg, src > conv > snk);
             }
             _ => return Err(anyhow!("Unsupported target type: {}", self.target)),
         };

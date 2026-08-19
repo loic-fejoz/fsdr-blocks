@@ -89,7 +89,7 @@ impl Commands {
             // .author(self.author())
             .build()?
             .create_pretty(output)
-            .with_context(|| format!("Error writing to {}", &output.display()))?;
+            .with_context(|| format!("Error writing to {}", output.display()))?;
         Ok(())
     }
 }
