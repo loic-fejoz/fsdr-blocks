@@ -1,10 +1,6 @@
 use fsdr_blocks::stream::*;
-use futuresdr::blocks::VectorSink;
-use futuresdr::blocks::VectorSource;
-use futuresdr::macros::connect;
-use futuresdr::runtime::Flowgraph;
-use futuresdr::runtime::Result;
-use futuresdr::runtime::Runtime;
+use futuresdr::blocks::{VectorSink, VectorSource};
+use futuresdr::prelude::*;
 
 #[test]
 fn deinterleave_u8() -> Result<()> {
@@ -18,16 +14,15 @@ fn deinterleave_u8() -> Result<()> {
     let vect_sink_1 = VectorSink::<u8>::new(1024);
 
     connect!(fg,
-        src > deinterleaver;
-        deinterleaver.out0 > vect_sink_0;
+        src > input.deinterleaver.out0 > vect_sink_0;
         deinterleaver.out1 > vect_sink_1;
     );
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk_0 = vect_sink_0.get()?;
+    let snk_0 = fg.block(&vect_sink_0)?;
     let snk_0 = snk_0.items();
 
-    let snk_1 = vect_sink_1.get()?;
+    let snk_1 = fg.block(&vect_sink_1)?;
     let snk_1 = snk_1.items();
 
     assert_eq!(snk_0.len(), orig.len() / 2);

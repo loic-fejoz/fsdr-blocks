@@ -1,4 +1,4 @@
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 use crate::cw::shared::CWAlphabet;
 use crate::cw::shared::get_alphabet;
@@ -43,7 +43,7 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let i_len = {
             let i = self.input.slice();

@@ -20,7 +20,7 @@ members = [
 ]
 
 [workspace.dependencies]
-futuresdr = { path = "../FutureSDR", version = "0.0.40-dev" }
+futuresdr = { git = "https://github.com/FutureSDR/FutureSDR", rev = "729f7aeba9fc47a5f5d8a2c88568ef78f6f868a8" }
 async-channel = "2.5"
 crossbeam-channel = "0.5"
 bimap = "0.6"
@@ -52,6 +52,7 @@ async-fs = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+futuresdr = { workspace = true, features = ["mocker"] }
 criterion = { workspace = true }
 quickcheck_macros = { workspace = true }
 tokio-test = { workspace = true }

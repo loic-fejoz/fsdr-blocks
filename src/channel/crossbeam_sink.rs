@@ -1,5 +1,5 @@
 use crossbeam_channel::Sender;
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 /// Push samples originating from a stream in a flowgraph into a crossbeam channel.
 ///
@@ -54,7 +54,7 @@ impl<T: Send + Sync + Copy + 'static, I: CpuBufferReader<Item = T>> Kernel for C
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let i = self.input.slice();
 

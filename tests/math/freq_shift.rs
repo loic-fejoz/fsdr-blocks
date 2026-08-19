@@ -1,11 +1,6 @@
 use fsdr_blocks::math::FrequencyShifter;
-use futuresdr::blocks::VectorSink;
-use futuresdr::blocks::VectorSource;
-use futuresdr::macros::connect;
-use futuresdr::num_complex::Complex32;
-use futuresdr::runtime::Flowgraph;
-use futuresdr::runtime::Result;
-use futuresdr::runtime::Runtime;
+use futuresdr::blocks::{VectorSink, VectorSource};
+use futuresdr::prelude::*;
 
 #[test]
 fn freq_shift_f32() -> Result<()> {
@@ -20,9 +15,9 @@ fn freq_shift_f32() -> Result<()> {
     connect!(fg,
         src > freq_shifter > vect_sink;
     );
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk_0 = vect_sink.get()?;
+    let snk_0 = fg.block(&vect_sink)?;
     let snk_0 = snk_0.items();
 
     assert_eq!(snk_0.len(), orig.len());
@@ -68,9 +63,9 @@ fn freq_shift_c32() -> Result<()> {
     connect!(fg,
         src > freq_shifter > vect_sink;
     );
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk_0 = vect_sink.get()?;
+    let snk_0 = fg.block(&vect_sink)?;
     let snk_0 = snk_0.items();
 
     assert_eq!(snk_0.len(), orig.len());

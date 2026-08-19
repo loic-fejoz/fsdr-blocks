@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use futuresdr::futures::AsyncRead;
 use futuresdr::futures::AsyncReadExt;
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 use sigmf::RecordingBuilder;
 use sigmf::{Annotation, Description};
@@ -38,7 +38,7 @@ use std::collections::VecDeque;
 #[cfg_attr(docsrs, doc(cfg(not(target_arch = "wasm32"))))]
 #[derive(Block)]
 pub struct SigMFSource<
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     R: AsyncRead + Send + Sync + Unpin + 'static,
     F: FnMut(&[u8]) -> T + Send + 'static,
     O: CpuBufferWriter<Item = T> = DefaultCpuWriter<T>,
@@ -55,7 +55,7 @@ pub struct SigMFSource<
 
 impl<T, R, F, O> SigMFSource<T, R, F, O>
 where
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     R: AsyncRead + Send + Sync + Unpin + 'static,
     F: FnMut(&[u8]) -> T + Send + 'static,
     O: CpuBufferWriter<Item = T>,
@@ -80,7 +80,7 @@ where
 #[doc(hidden)]
 impl<T, R, F, O> Kernel for SigMFSource<T, R, F, O>
 where
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     R: AsyncRead + Send + Sync + Unpin + 'static,
     F: FnMut(&[u8]) -> T + Send + 'static,
     O: CpuBufferWriter<Item = T>,
@@ -89,10 +89,10 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let n_read_items = {
-            let o = self.output.slice();
+            let (o, mut o_tags) = self.output.slice_with_tags();
             let needed_bytes = o.len() * self.item_size;
             self.buf.resize(needed_bytes, 0);
 
@@ -118,28 +118,24 @@ where
                     let upper_sample_index = self.sample_index + n_read_items;
                     if (self.sample_index..upper_sample_index).contains(&annot_sample_start) {
                         let annot = self.annotations.pop_front().unwrap();
-                        let tag = serde_pmt::to_pmt(&annot)?;
-                        let tag = Tag::Data(tag);
-                        self.output
-                            .slice_with_tags()
-                            .1
-                            .add_tag(annot_sample_start - self.sample_index, tag);
+                        let tag_index = annot_sample_start - self.sample_index;
+                        let pmt = serde_pmt::to_pmt(&annot)?;
+                        o_tags.add_tag(tag_index, Tag::Data(pmt));
                     } else {
                         break;
                     }
                 } else {
-                    // Skip annotations without sample_start
-                    self.annotations.pop_front();
+                    break;
                 }
             }
+
+            self.sample_index += n_read_items;
             n_read_items
         };
 
         if n_read_items > 0 {
             self.output.produce(n_read_items);
-            self.sample_index += n_read_items;
         }
-
         Ok(())
     }
 }
@@ -148,7 +144,7 @@ pub struct SigMFSourceBuilder {
     basename: PathBuf,
 }
 
-pub struct SigMFSourceBuilderFromReader<R: AsyncRead> {
+pub struct SigMFSourceBuilderFromReader<R> {
     data: R,
     desc: Description,
 }
@@ -201,7 +197,7 @@ impl SigMFSourceBuilder {
         SigMFSourceBuilderFromReader { data: reader, desc }
     }
 
-    pub async fn build<T: Send + Sync + Default + Clone + std::fmt::Debug + 'static>(
+    pub async fn build<T: Send + Sync + Default + Copy + std::fmt::Debug + 'static>(
         &mut self,
     ) -> Result<SigMFSource<T, async_fs::File, impl FnMut(&[u8]) -> T + Send + 'static>>
     where
@@ -220,7 +216,7 @@ impl<R> SigMFSourceBuilderFromReader<R>
 where
     R: AsyncRead + Send + Sync + Unpin + 'static,
 {
-    pub async fn build<T: Send + Sync + Default + Clone + std::fmt::Debug + 'static>(
+    pub async fn build<T: Send + Sync + Default + Copy + std::fmt::Debug + 'static>(
         self,
     ) -> Result<SigMFSource<T, R, impl FnMut(&[u8]) -> T + Send + 'static>>
     where

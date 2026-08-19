@@ -1,8 +1,7 @@
 use fsdr_blocks::agc::AgcBuilder;
 use futuresdr::blocks::{VectorSink, VectorSource};
-use futuresdr::macros::connect;
-use futuresdr::num_complex::{Complex32, ComplexFloat};
-use futuresdr::runtime::{Flowgraph, Result, Runtime};
+use futuresdr::num_complex::ComplexFloat;
+use futuresdr::prelude::*;
 
 #[test]
 fn test_agc_f32_gain_adjustment() -> Result<()> {
@@ -20,9 +19,9 @@ fn test_agc_f32_gain_adjustment() -> Result<()> {
     let snk = VectorSink::<f32>::new(1024);
 
     connect!(fg, src > agc > snk);
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = snk.get()?;
+    let snk = fg.block(&snk)?;
     let items = snk.items();
     assert_eq!(items.len(), 1000);
 
@@ -53,9 +52,9 @@ fn test_agc_complex32_power_and_max_gain() -> Result<()> {
     let snk = VectorSink::<Complex32>::new(1024);
 
     connect!(fg, src > agc > snk);
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = snk.get()?;
+    let snk = fg.block(&snk)?;
     let items = snk.items();
     assert_eq!(items.len(), 500);
 
@@ -84,9 +83,9 @@ fn test_agc_squelch_and_zero_inputs() -> Result<()> {
     let snk = VectorSink::<f32>::new(1024);
 
     connect!(fg, src > agc > snk);
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = snk.get()?;
+    let snk = fg.block(&snk)?;
     let items = snk.items();
     assert_eq!(items.len(), 5);
 
@@ -113,9 +112,9 @@ fn test_agc_gain_lock() -> Result<()> {
     let snk = VectorSink::<f32>::new(1024);
 
     connect!(fg, src > agc > snk);
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = snk.get()?;
+    let snk = fg.block(&snk)?;
     let items = snk.items();
     assert_eq!(items.len(), 100);
 

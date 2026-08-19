@@ -1,11 +1,7 @@
 use fsdr_blocks::cw::cw_to_char::CWToCharBuilder;
 use fsdr_blocks::cw::shared::{CWAlphabet, msg_to_cw};
-use futuresdr::async_io::block_on;
 use futuresdr::blocks::{ChannelSource, VectorSink, VectorSource};
-use futuresdr::futures::SinkExt;
-use futuresdr::macros::connect;
-use futuresdr::runtime::Result;
-use futuresdr::runtime::{Flowgraph, Runtime};
+use futuresdr::prelude::*;
 
 // cargo test --features="cw"
 // cargo nextest run test_cw_to_char_vector --no-capture --features="cw"
@@ -22,13 +18,12 @@ fn test_cw_to_char_vector() -> Result<()> {
     let vector_snk = VectorSink::<u32>::new(1024);
 
     connect!(fg,
-        vector_src > cw_to_char;
-        cw_to_char > vector_snk;
+        vector_src > cw_to_char > vector_snk;
     );
 
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = vector_snk.get()?;
+    let snk = fg.block(&vector_snk)?;
     let received: Vec<char> = snk
         .items()
         .iter()
@@ -50,7 +45,7 @@ fn test_cw_to_char_vector() -> Result<()> {
 fn test_cw_to_char_channel() -> Result<()> {
     let mut fg = Flowgraph::new();
 
-    let (mut tx, rx) = futuresdr::futures::channel::mpsc::channel::<Box<[CWAlphabet]>>(10);
+    let (tx, rx) = mpsc::channel::<Box<[CWAlphabet]>>(10);
 
     let channel_src = ChannelSource::<CWAlphabet>::new(rx);
     let cw_to_char = CWToCharBuilder::new().build();
@@ -61,8 +56,8 @@ fn test_cw_to_char_channel() -> Result<()> {
     );
 
     let rt = Runtime::new();
-    let _fg = block_on(async move {
-        let (fg, _) = rt.start(fg).await.unwrap();
+    let running = rt.start(fg)?;
+    let fg_term = block_on(async move {
         let c = msg_to_cw(['S'].as_slice()).into_boxed_slice();
         tx.send(c).await.unwrap();
         let c = msg_to_cw([' '].as_slice()).into_boxed_slice();
@@ -75,11 +70,11 @@ fn test_cw_to_char_channel() -> Result<()> {
         tx.send(c).await.unwrap();
         let c = msg_to_cw(['S'].as_slice()).into_boxed_slice();
         tx.send(c).await.unwrap();
-        tx.close().await.unwrap();
-        fg.await // as Result<Flowgraph>
+        drop(tx);
+        running.wait_async().await
     })?;
 
-    let snk = vector_snk.get()?;
+    let snk = fg_term.block(&vector_snk)?;
     let received: Vec<char> = snk
         .items()
         .iter()

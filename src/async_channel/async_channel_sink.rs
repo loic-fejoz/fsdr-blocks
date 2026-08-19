@@ -1,5 +1,5 @@
 use async_channel::Sender;
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 /// Push samples originating from a stream in a flowgraph into an async channel.
 ///
@@ -56,7 +56,7 @@ impl<T: Send + Sync + Clone + 'static, I: CpuBufferReader<Item = T>> Kernel
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let i = self.input.slice();
 

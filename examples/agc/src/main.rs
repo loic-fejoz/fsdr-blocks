@@ -1,5 +1,4 @@
 use fsdr_blocks::agc::AgcBuilder;
-use futuresdr::async_io;
 use futuresdr::blocks::{Combine, SignalSourceBuilder, audio::AudioSink};
 use futuresdr::prelude::*;
 use std::thread::sleep;
@@ -23,42 +22,42 @@ fn main() -> Result<()> {
         .build();
 
     // Audiosink to output the modulated tone
-    let audio_snk = AudioSink::new(48_000, 1);
+    let audio_snk = AudioSink::new(48_000, 1)?;
 
     connect!(fg,
              src > in0.combine;
              gain_change > in1.combine;
              combine > agc > audio_snk;
     );
-    let agc = agc.get()?.id;
+    let agc = agc.id();
 
     // Start the flowgraph and save the handle
     let rt = Runtime::new();
-    let (_res, mut handle) = rt.start_sync(fg)?;
+    let handle = rt.start(fg)?;
 
     // Keep changing gain and gain lock.
     loop {
         // Reference power of 1.0 is the power level we want to achieve
         println!("Setting reference power to 1.0");
-        async_io::block_on(handle.call(agc, "reference_power", Pmt::F32(1.0)))?;
+        block_on(handle.call(agc, "reference_power", Pmt::F32(1.0)))?;
 
         // A high max gain allows to amplify a signal
         println!("Setting Max Gain to 65536.0");
-        async_io::block_on(handle.call(agc, "max_gain", Pmt::F32(65536.0)))?;
+        block_on(handle.call(agc, "max_gain", Pmt::F32(65536.0)))?;
         sleep(Duration::from_secs(5));
 
         // Setting a gain lock prevents gain changes from happening
         println!("Setting gain lock for 5s");
-        async_io::block_on(handle.call(agc, "gain_lock", Pmt::Bool(true)))?;
+        block_on(handle.call(agc, "gain_lock", Pmt::Bool(true)))?;
 
         // Audio should get quiet faster, but gain is still locked here. It will be released after 5 seconds.
         println!("Setting reference power to 0.2");
-        async_io::block_on(handle.call(agc, "reference_power", Pmt::F32(0.2)))?;
+        block_on(handle.call(agc, "reference_power", Pmt::F32(0.2)))?;
         sleep(Duration::from_secs(5));
 
         // Gain lock released! Audio should get more quiet here for 10 seconds
         println!("Releasing gain lock");
-        async_io::block_on(handle.call(agc, "gain_lock", Pmt::Bool(false)))?;
+        block_on(handle.call(agc, "gain_lock", Pmt::Bool(false)))?;
         sleep(Duration::from_secs(10));
     }
 }

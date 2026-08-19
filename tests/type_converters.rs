@@ -1,7 +1,6 @@
 use fsdr_blocks::type_converters::*;
 use futuresdr::blocks::{VectorSink, VectorSource};
-use futuresdr::macros::connect;
-use futuresdr::runtime::{Flowgraph, Result, Runtime};
+use futuresdr::prelude::*;
 
 #[test]
 fn convert_u8_f32() -> Result<()> {
@@ -16,9 +15,9 @@ fn convert_u8_f32() -> Result<()> {
     connect!(fg,
         src > convert_u8_f32 > vect_sink;
     );
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = vect_sink.get()?;
+    let snk = fg.block(&vect_sink)?;
     let v = snk.items();
 
     assert_eq!(v.len(), orig.len());
@@ -86,9 +85,9 @@ fn test_scaled_conversion_in_flowgraph() -> Result<()> {
     let snk = VectorSink::<f32>::new(1024);
 
     connect!(fg, src > conv > snk);
-    Runtime::new().run(fg)?;
+    let fg = Runtime::new().run(fg)?;
 
-    let snk = snk.get()?;
+    let snk = fg.block(&snk)?;
     let items = snk.items();
     assert_eq!(items.len(), 5);
     assert_eq!(items[0], 0.0);

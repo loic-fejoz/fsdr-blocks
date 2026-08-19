@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::PathBuf;
 
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 use sigmf::Annotation;
 use sigmf::{DatasetFormat, DescriptionBuilder};
@@ -32,7 +32,7 @@ use crate::serde_pmt::from_pmt;
 #[cfg_attr(docsrs, doc(cfg(not(target_arch = "wasm32"))))]
 #[derive(Block)]
 pub struct SigMFSink<
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     W: Write + Send + 'static,
     M: Write + Send + 'static,
     I: CpuBufferReader<Item = T> = DefaultCpuReader<T>,
@@ -48,7 +48,7 @@ pub struct SigMFSink<
 
 impl<T, W, M, I> SigMFSink<T, W, M, I>
 where
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     W: Write + Send + 'static,
     M: Write + Send + 'static,
     I: CpuBufferReader<Item = T>,
@@ -72,7 +72,7 @@ pub fn convert_pmt_to_annotation(value: &Pmt) -> Option<Annotation> {
 #[doc(hidden)]
 impl<T, W, M, I> Kernel for SigMFSink<T, W, M, I>
 where
-    T: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    T: Send + Sync + Default + Copy + std::fmt::Debug + 'static,
     W: Write + Send + 'static,
     M: Write + Send + 'static,
     I: CpuBufferReader<Item = T>,
@@ -81,7 +81,7 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let items = {
             let (i, tags) = self.input.slice_with_tags();
@@ -114,7 +114,7 @@ where
         Ok(())
     }
 
-    async fn deinit(&mut self, _mio: &mut MessageOutputs, _meta: &mut BlockMeta) -> Result<()> {
+    async fn deinit(&mut self, _mio: &mut MessageOutputs, _meta: &BlockMeta) -> Result<()> {
         let desc = self.description.build()?;
         desc.to_writer_pretty(&mut self.meta_writer)?;
         Ok(())
@@ -181,7 +181,7 @@ impl From<&str> for SigMFSinkBuilder {
 }
 
 impl SigMFSinkBuilder {
-    pub async fn build<T: Send + Sync + Default + Clone + std::fmt::Debug + 'static>(
+    pub async fn build<T: Send + Sync + Default + Copy + std::fmt::Debug + 'static>(
         &mut self,
     ) -> Result<SigMFSink<T, std::fs::File, std::fs::File>> {
         let desc = DescriptionBuilder::from(self.datatype);

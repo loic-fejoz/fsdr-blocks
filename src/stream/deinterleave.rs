@@ -1,4 +1,4 @@
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 /// This blocks deinterleave a unique stream into two separate stream.
 /// Typically used to deinterleave iq stream into of stream for `i` and one for `q`.
@@ -65,7 +65,7 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let (m, m0, m1) = {
             let i0 = self.input.slice();

@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 use crate::cw::shared::CWAlphabet::{self, *};
 
@@ -75,7 +75,7 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let (consumed, produced, finished) = {
             let i = self.input.slice();

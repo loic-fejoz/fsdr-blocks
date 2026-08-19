@@ -1,12 +1,12 @@
 use futuresdr::futuredsp::num_traits::ToPrimitive;
 use futuresdr::num_complex::ComplexFloat;
-use futuresdr::prelude::*;
+use futuresdr::runtime::dev::prelude::*;
 
 /// Automatic Gain Control Block
 #[derive(Block)]
 #[message_inputs(auto_lock, gain_lock, max_gain, adjustment_rate, reference_power)]
 pub struct Agc<
-    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + Copy + 'static,
     I: CpuBufferReader<Item = T> = DefaultCpuReader<T>,
     O: CpuBufferWriter<Item = T> = DefaultCpuWriter<T>,
 > {
@@ -32,7 +32,7 @@ pub struct Agc<
 
 impl<T, I, O> Agc<T, I, O>
 where
-    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + Copy + 'static,
     I: CpuBufferReader<Item = T>,
     O: CpuBufferWriter<Item = T>,
 {
@@ -46,10 +46,7 @@ where
         gain_lock: bool,
         auto_lock: bool,
     ) -> Self {
-        assert!(max_gain >= 0.0);
-        assert!(squelch >= 0.0);
-
-        Agc {
+        Self {
             input: I::default(),
             output: O::default(),
             squelch,
@@ -66,7 +63,7 @@ where
         &mut self,
         _io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
         if let Pmt::Bool(l) = p {
@@ -81,7 +78,7 @@ where
         &mut self,
         _io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
         if let Pmt::Bool(l) = p {
@@ -96,7 +93,7 @@ where
         &mut self,
         _io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
         if let Pmt::F32(r) = p {
@@ -111,7 +108,7 @@ where
         &mut self,
         _io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
         if let Pmt::F32(r) = p {
@@ -126,7 +123,7 @@ where
         &mut self,
         _io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
         p: Pmt,
     ) -> Result<Pmt> {
         if let Pmt::F32(r) = p {
@@ -149,7 +146,7 @@ where
         &mut self,
         io: &mut WorkIo,
         _mio: &mut MessageOutputs,
-        _meta: &mut BlockMeta,
+        _meta: &BlockMeta,
     ) -> Result<()> {
         let m = {
             let i = self.input.slice();
@@ -238,7 +235,7 @@ pub struct AgcBuilder<T> {
 
 impl<T> AgcBuilder<T>
 where
-    T: Send + Sync + ComplexFloat + Default + std::fmt::Debug + 'static,
+    T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + Copy + 'static,
 {
     /// Create builder w/ default parameters
     ///
@@ -324,8 +321,8 @@ where
     }
 }
 
-impl<T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + 'static> Default
-    for AgcBuilder<T>
+impl<T: Send + Sync + ComplexFloat<Real: ToPrimitive> + Default + std::fmt::Debug + Copy + 'static>
+    Default for AgcBuilder<T>
 {
     fn default() -> Self {
         Self::new()

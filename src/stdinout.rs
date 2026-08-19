@@ -132,7 +132,7 @@ impl ToEndianBytes for Complex32 {
     }
 }
 
-impl<A: ToEndianBytes + Send + Sync + Default + Clone + std::fmt::Debug + 'static>
+impl<A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static>
     StdInOutBuilder<A>
 {
     pub fn build(self) -> Sink<impl FnMut(&A) + Send + 'static, A> {
