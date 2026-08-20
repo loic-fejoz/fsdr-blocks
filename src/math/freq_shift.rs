@@ -2,9 +2,10 @@ use futuresdr::blocks::signal_source::FixedPointPhase;
 use futuresdr::blocks::signal_source::NCO;
 use futuresdr::num_complex::Complex32;
 use futuresdr::runtime::dev::prelude::*;
+use futuresdr::runtime::Pmt;
 
-/// This blocks shift the signal in the frequency domain based on the [`NCO`] implementation.
-/// Currently implemented only for float and [`Complex32`]
+/// This block shifts the signal in the frequency domain based on the [`NCO`] implementation.
+/// Implemented for float (`f32`) and [`Complex32`].
 ///
 /// # Usage
 ///
@@ -16,11 +17,14 @@ use futuresdr::runtime::dev::prelude::*;
 /// let blk = FrequencyShifter::<Complex32>::new(freq as f32, sample_rate as f32);
 /// ```
 #[derive(Block)]
+#[message_inputs(set_frequency)]
 pub struct FrequencyShifter<
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static,
+    A: Send + Sync + Default + Clone + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A> = DefaultCpuReader<A>,
     O: CpuBufferWriter<Item = A> = DefaultCpuWriter<A>,
 > {
+    freq: f32,
+    sample_rate: f32,
     #[input]
     input: I,
     #[output]
@@ -31,7 +35,7 @@ pub struct FrequencyShifter<
 
 impl<A, I, O> FrequencyShifter<A, I, O>
 where
-    A: Send + Sync + Default + Clone + std::fmt::Debug + 'static + Copy,
+    A: Send + Sync + Default + Clone + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A>,
     O: CpuBufferWriter<Item = A>,
 {
@@ -40,11 +44,33 @@ where
         let phase_inc = 2.0 * core::f32::consts::PI * frequency / sample_rate;
         let nco = NCO::new(0.0f32, phase_inc);
         Self {
+            freq: frequency,
+            sample_rate,
             input: I::default(),
             output: O::default(),
             nco,
             phase_inc: FixedPointPhase::new(phase_inc),
         }
+    }
+
+    async fn set_frequency(
+        &mut self,
+        _io: &mut WorkIo,
+        _mio: &mut MessageOutputs,
+        _meta: &BlockMeta,
+        p: Pmt,
+    ) -> Result<Pmt> {
+        let freq = match p {
+            Pmt::F32(f) => f,
+            Pmt::F64(f) => f as f32,
+            Pmt::U32(f) => f as f32,
+            Pmt::U64(f) => f as f32,
+            _ => return Ok(Pmt::InvalidValue),
+        };
+        self.freq = freq;
+        let rad_inc = 2.0 * core::f32::consts::PI * freq / self.sample_rate;
+        self.phase_inc = FixedPointPhase::new(rad_inc);
+        Ok(Pmt::Ok)
     }
 }
 
