@@ -162,13 +162,22 @@ where
                 let reference_power = self.reference_power;
                 let adjustment_rate = self.adjustment_rate;
 
+                let dynamic_adjustment_rate = if adjustment_rate > 0.0 {
+                    adjustment_rate
+                } else {
+                    0.0001
+                };
+
                 for (src, dst) in i[..m].iter().zip(o[..m].iter_mut()) {
-                    let src_abs = src.abs().to_f32().unwrap_or(0.0);
-                    let input_power = src_abs * src_abs;
+                    let re_in = src.re().to_f32().unwrap_or(0.0);
+                    let im_in = src.im().to_f32().unwrap_or(0.0);
+                    let input_power = re_in * re_in + im_in * im_in;
+
                     if input_power > squelch {
                         let output = (*src) * T::from(gain).unwrap();
-                        let out_abs = output.abs().to_f32().unwrap_or(0.0);
-                        let output_power = (out_abs * out_abs).max(f32::EPSILON);
+                        let re_out = output.re().to_f32().unwrap_or(0.0);
+                        let im_out = output.im().to_f32().unwrap_or(0.0);
+                        let output_power = re_out * re_out + im_out * im_out;
 
                         if auto_lock {
                             if input_power > reference_power {
@@ -181,14 +190,13 @@ where
                         }
 
                         if !gain_lock {
-                            let dynamic_adjustment_rate = if adjustment_rate > 0.0 {
-                                adjustment_rate
-                            } else {
-                                0.0001
+                            let err = unsafe {
+                                core::intrinsics::fsub_fast(reference_power, output_power)
                             };
-                            gain *= 1.0
-                                + (reference_power / output_power).log10()
-                                    * dynamic_adjustment_rate;
+                            let step = unsafe {
+                                core::intrinsics::fmul_fast(err, dynamic_adjustment_rate)
+                            };
+                            gain = unsafe { core::intrinsics::fadd_fast(gain, step) };
                             gain = gain.clamp(0.0, max_gain);
                         }
                         *dst = output;

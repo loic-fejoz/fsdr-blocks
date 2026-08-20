@@ -48,6 +48,21 @@ where
     }
 }
 
+#[inline(always)]
+fn fast_complex_mul(a: Complex32, b: Complex32) -> Complex32 {
+    unsafe {
+        let re_re = core::intrinsics::fmul_fast(a.re, b.re);
+        let im_im = core::intrinsics::fmul_fast(a.im, b.im);
+        let re_im = core::intrinsics::fmul_fast(a.re, b.im);
+        let im_re = core::intrinsics::fmul_fast(a.im, b.re);
+
+        let re = core::intrinsics::fsub_fast(re_re, im_im);
+        let im = core::intrinsics::fadd_fast(re_im, im_re);
+
+        Complex32::new(re, im)
+    }
+}
+
 #[doc(hidden)]
 impl<I, O> Kernel for FrequencyShifter<f32, I, O>
 where
@@ -67,7 +82,8 @@ where
             let m = std::cmp::min(i.len(), o.len());
             if m > 0 {
                 for (v, r) in i[..m].iter().zip(o[..m].iter_mut()) {
-                    *r = (*v) * self.nco.phase.cos();
+                    let cos_val = self.nco.phase.cos();
+                    *r = unsafe { core::intrinsics::fmul_fast(*v, cos_val) };
                     self.nco.step();
                 }
             }
@@ -107,9 +123,23 @@ where
             if m > 0 {
                 let rotation = Complex32::new(self.phase_inc.cos(), self.phase_inc.sin());
                 let mut current_phasor = Complex32::new(self.nco.phase.cos(), self.nco.phase.sin());
+                let mut count = 0usize;
+
                 for (v, r) in i[..m].iter().zip(o[..m].iter_mut()) {
-                    *r = (*v) * current_phasor;
-                    current_phasor *= rotation;
+                    *r = fast_complex_mul(*v, current_phasor);
+                    current_phasor = fast_complex_mul(current_phasor, rotation);
+                    count += 1;
+                    if count & 0xFF == 0 {
+                        let norm_sq = current_phasor.re * current_phasor.re
+                            + current_phasor.im * current_phasor.im;
+                        if (norm_sq - 1.0).abs() > 1e-4 {
+                            let inv_norm = 1.0 / norm_sq.sqrt();
+                            current_phasor.re =
+                                unsafe { core::intrinsics::fmul_fast(current_phasor.re, inv_norm) };
+                            current_phasor.im =
+                                unsafe { core::intrinsics::fmul_fast(current_phasor.im, inv_norm) };
+                        }
+                    }
                 }
                 self.nco.steps(m as i32);
             }

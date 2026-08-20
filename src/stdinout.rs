@@ -84,14 +84,14 @@ pub trait ToEndianBytes {
 }
 
 impl ToEndianBytes for u8 {
-    #[inline]
+    #[inline(always)]
     fn write_to<W: Write>(&self, w: &mut W, _order: BytesOrder) -> std::io::Result<()> {
         w.write_all(&[*self])
     }
 }
 
 impl ToEndianBytes for i16 {
-    #[inline]
+    #[inline(always)]
     fn write_to<W: Write>(&self, w: &mut W, order: BytesOrder) -> std::io::Result<()> {
         match order {
             BytesOrder::Native => w.write_all(&self.to_ne_bytes()),
@@ -102,7 +102,7 @@ impl ToEndianBytes for i16 {
 }
 
 impl ToEndianBytes for f32 {
-    #[inline]
+    #[inline(always)]
     fn write_to<W: Write>(&self, w: &mut W, order: BytesOrder) -> std::io::Result<()> {
         match order {
             BytesOrder::Native => w.write_all(&self.to_ne_bytes()),
@@ -113,20 +113,24 @@ impl ToEndianBytes for f32 {
 }
 
 impl ToEndianBytes for Complex32 {
-    #[inline]
+    #[inline(always)]
     fn write_to<W: Write>(&self, w: &mut W, order: BytesOrder) -> std::io::Result<()> {
         match order {
             BytesOrder::Native => {
-                w.write_all(&self.re.to_ne_bytes())?;
-                w.write_all(&self.im.to_ne_bytes())
+                let bytes: [u8; 8] = unsafe { std::mem::transmute(*self) };
+                w.write_all(&bytes)
             }
             BytesOrder::LittleEndian => {
-                w.write_all(&self.re.to_le_bytes())?;
-                w.write_all(&self.im.to_le_bytes())
+                let mut bytes = [0u8; 8];
+                bytes[..4].copy_from_slice(&self.re.to_le_bytes());
+                bytes[4..].copy_from_slice(&self.im.to_le_bytes());
+                w.write_all(&bytes)
             }
             BytesOrder::BigEndian => {
-                w.write_all(&self.re.to_be_bytes())?;
-                w.write_all(&self.im.to_be_bytes())
+                let mut bytes = [0u8; 8];
+                bytes[..4].copy_from_slice(&self.re.to_be_bytes());
+                bytes[4..].copy_from_slice(&self.im.to_be_bytes());
+                w.write_all(&bytes)
             }
         }
     }

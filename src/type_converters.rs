@@ -104,6 +104,7 @@ where
 macro_rules! impl_scaled_converter {
     ($src:ty, $dst:ty, $conv:expr) => {
         impl ScaledConverterBuilder<$src, $dst> {
+            #[inline(always)]
             pub fn build(self) -> Apply<impl FnMut(&$src) -> $dst + Send + 'static, $src, $dst> {
                 Apply::new(|i: &$src| -> $dst { ScaledConverterBuilder::<$src, $dst>::convert(i) })
             }
