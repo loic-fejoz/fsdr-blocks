@@ -1,7 +1,6 @@
 //! ## Blocks related to stdin/stdout serialization
 
 use core::marker::PhantomData;
-use futuresdr::blocks::Sink;
 use futuresdr::num_complex::Complex32;
 use std::io::Write;
 
@@ -136,22 +135,88 @@ impl ToEndianBytes for Complex32 {
     }
 }
 
-impl<A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static>
-    StdInOutBuilder<A>
+use futuresdr::runtime::dev::prelude::*;
+
+#[derive(Block)]
+pub struct StdOutSink<
+    A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static,
+    I: CpuBufferReader<Item = A> = DefaultCpuReader<A>,
+> {
+    #[input]
+    input: I,
+    bytes_order: BytesOrder,
+}
+
+impl<
+    A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static,
+    I: CpuBufferReader<Item = A>,
+> StdOutSink<A, I>
 {
-    pub fn build(self) -> Sink<impl FnMut(&A) + Send + 'static, A> {
-        match self.direction {
-            StdDirection::Out => {
-                let mut stdout = std::io::BufWriter::new(std::io::stdout());
-                let bytes_order = self.bytes_order;
-                Sink::new(move |f: &A| {
-                    if let Err(e) = f.write_to(&mut stdout, bytes_order)
+    pub fn new(bytes_order: BytesOrder) -> Self {
+        Self {
+            input: I::default(),
+            bytes_order,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl<
+    A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static,
+    I: CpuBufferReader<Item = A>,
+> Kernel for StdOutSink<A, I>
+{
+    async fn work(
+        &mut self,
+        io: &mut WorkIo,
+        _mio: &mut MessageOutputs,
+        _meta: &BlockMeta,
+    ) -> Result<()> {
+        let i = self.input.slice();
+        let m = i.len();
+        if m > 0 {
+            let mut stdout = std::io::BufWriter::new(std::io::stdout());
+            match self.bytes_order {
+                BytesOrder::Native => {
+                    let bytes = unsafe {
+                        std::slice::from_raw_parts(
+                            i.as_ptr() as *const u8,
+                            std::mem::size_of_val(i),
+                        )
+                    };
+                    if let Err(e) = stdout.write_all(bytes)
                         && e.kind() != std::io::ErrorKind::BrokenPipe
                     {
                         eprintln!("StdInOut: write error: {e}");
                     }
-                })
+                }
+                BytesOrder::LittleEndian | BytesOrder::BigEndian => {
+                    for sample in i {
+                        if let Err(e) = sample.write_to(&mut stdout, self.bytes_order)
+                            && e.kind() != std::io::ErrorKind::BrokenPipe
+                        {
+                            eprintln!("StdInOut: write error: {e}");
+                        }
+                    }
+                }
             }
+            self.input.consume(m);
+        }
+
+        if self.input.finished() && self.input.slice().is_empty() {
+            io.finished = true;
+        }
+
+        Ok(())
+    }
+}
+
+impl<A: ToEndianBytes + Send + Sync + Default + Copy + std::fmt::Debug + 'static>
+    StdInOutBuilder<A>
+{
+    pub fn build(self) -> StdOutSink<A> {
+        match self.direction {
+            StdDirection::Out => StdOutSink::new(self.bytes_order),
             StdDirection::In => todo!("stdin not yet implemented"),
         }
     }

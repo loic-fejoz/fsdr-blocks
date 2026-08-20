@@ -27,6 +27,7 @@
 
 use core::marker::PhantomData;
 use futuresdr::blocks::Apply;
+use std::simd::prelude::*;
 
 /// Main builder for type conversion blocks
 pub struct TypeConvertersBuilder {}
@@ -119,40 +120,91 @@ macro_rules! impl_scaled_converter {
 }
 
 // Signed integer <-> f32 conversions (zero-centered at 0.0, GNU Radio standard)
-impl_scaled_converter!(i8, f32, |i| (*i as f32) / (i8::MAX as f32));
-impl_scaled_converter!(i16, f32, |i| (*i as f32) / (i16::MAX as f32));
-impl_scaled_converter!(i32, f32, |i| (*i as f32) / (i32::MAX as f32));
+impl_scaled_converter!(i8, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(*i as f32, 1.0 / (i8::MAX as f32))
+});
+impl_scaled_converter!(i16, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(*i as f32, 1.0 / (i16::MAX as f32))
+});
+impl_scaled_converter!(i32, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(*i as f32, 1.0 / (i32::MAX as f32))
+});
 
 impl_scaled_converter!(f32, i8, |i| {
-    ((*i) * (i8::MAX as f32))
-        .round()
-        .clamp(i8::MIN as f32, i8::MAX as f32) as i8
+    let scaled = unsafe { core::intrinsics::fmul_fast(*i, i8::MAX as f32) };
+    scaled.round().clamp(i8::MIN as f32, i8::MAX as f32) as i8
 });
+impl ScaledConverterBuilder<f32, i16> {
+    #[inline(always)]
+    #[allow(clippy::chunks_exact_to_as_chunks)]
+    pub fn convert_slice(src: &[f32], dst: &mut [i16]) {
+        let len = src.len().min(dst.len());
+        let (src_chunks, src_rem) = src[..len].as_chunks::<8>();
+        let (dst_chunks, dst_rem) = dst[..len].as_chunks_mut::<8>();
+
+        let scale = Simd::splat(32767.0f32);
+        let min_val = Simd::splat(-32768.0f32);
+        let max_val = Simd::splat(32767.0f32);
+
+        for (s, d) in src_chunks.iter().zip(dst_chunks.iter_mut()) {
+            let v = Simd::from_array(*s);
+            let scaled = v * scale;
+            let clamped = scaled.simd_clamp(min_val, max_val);
+            let arr = clamped.to_array();
+            for i in 0..8 {
+                d[i] = arr[i].round() as i16;
+            }
+        }
+
+        for (s, d) in src_rem.iter().zip(dst_rem.iter_mut()) {
+            let scaled = unsafe { core::intrinsics::fmul_fast(*s, 32767.0) };
+            *d = scaled.round().clamp(-32768.0, 32767.0) as i16;
+        }
+    }
+}
+
 impl_scaled_converter!(f32, i16, |i| {
-    ((*i) * (i16::MAX as f32))
-        .round()
-        .clamp(i16::MIN as f32, i16::MAX as f32) as i16
+    let scaled = unsafe { core::intrinsics::fmul_fast(*i, i16::MAX as f32) };
+    scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
 });
 impl_scaled_converter!(f32, i32, |i| {
-    ((*i) * (i32::MAX as f32))
-        .round()
-        .clamp(i32::MIN as f32, i32::MAX as f32) as i32
+    let scaled = unsafe { core::intrinsics::fmul_fast(*i, i32::MAX as f32) };
+    scaled.round().clamp(i32::MIN as f32, i32::MAX as f32) as i32
 });
 
 // Unsigned integer <-> f32 conversions (midpoint mapped to 0.0, GNU Radio standard)
-impl_scaled_converter!(u8, f32, |i| ((*i as f32) - 128.0) / 128.0);
-impl_scaled_converter!(u16, f32, |i| ((*i as f32) - 32768.0) / 32768.0);
-impl_scaled_converter!(u32, f32, |i| ((*i as f64 - 2147483648.0) / 2147483648.0)
-    as f32);
+impl_scaled_converter!(u8, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(core::intrinsics::fsub_fast(*i as f32, 128.0), 1.0 / 128.0)
+});
+impl_scaled_converter!(u16, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(
+        core::intrinsics::fsub_fast(*i as f32, 32768.0),
+        1.0 / 32768.0,
+    )
+});
+impl_scaled_converter!(u32, f32, |i| unsafe {
+    core::intrinsics::fmul_fast(
+        core::intrinsics::fsub_fast(*i as f64, 2147483648.0),
+        1.0 / 2147483648.0,
+    ) as f32
+});
 
 impl_scaled_converter!(f32, u8, |i| {
-    ((*i) * 128.0 + 128.0).round().clamp(0.0, 255.0) as u8
+    let scaled =
+        unsafe { core::intrinsics::fadd_fast(core::intrinsics::fmul_fast(*i, 128.0), 128.0) };
+    scaled.round().clamp(0.0, 255.0) as u8
 });
 impl_scaled_converter!(f32, u16, |i| {
-    ((*i) * 32768.0 + 32768.0).round().clamp(0.0, 65535.0) as u16
+    let scaled =
+        unsafe { core::intrinsics::fadd_fast(core::intrinsics::fmul_fast(*i, 32768.0), 32768.0) };
+    scaled.round().clamp(0.0, 65535.0) as u16
 });
 impl_scaled_converter!(f32, u32, |i| {
-    ((*i as f64) * 2147483648.0 + 2147483648.0)
-        .round()
-        .clamp(0.0, u32::MAX as f64) as u32
+    let scaled = unsafe {
+        core::intrinsics::fadd_fast(
+            core::intrinsics::fmul_fast(*i as f64, 2147483648.0),
+            2147483648.0,
+        )
+    };
+    scaled.round().clamp(0.0, u32::MAX as f64) as u32
 });

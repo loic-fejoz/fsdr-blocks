@@ -109,3 +109,13 @@ harness = false
 name = "freq_shift"
 path = "benches/math/freq_shift.rs"
 harness = false
+
+[[bench]]
+name = "deinterleave"
+path = "benches/stream/deinterleave.rs"
+harness = false
+
+[[bench]]
+name = "stdinout"
+path = "benches/stdinout.rs"
+harness = false

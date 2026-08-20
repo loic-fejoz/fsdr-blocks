@@ -32,6 +32,13 @@ pub fn bench_converters(c: &mut Criterion) {
         });
     });
 
+    group.bench_function("f32_to_i16_slice_simd_64k", |b| {
+        let mut out = vec![0i16; n_samp];
+        b.iter(|| {
+            ScaledConverterBuilder::<f32, i16>::convert_slice(&input_f32, &mut out);
+        });
+    });
+
     group.bench_function("u8_to_f32_64k", |b| {
         b.iter(|| {
             let mut out = vec![0.0f32; n_samp];

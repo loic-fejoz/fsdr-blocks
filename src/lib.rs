@@ -1,4 +1,5 @@
 #![feature(core_intrinsics)]
+#![feature(portable_simd)]
 #![allow(internal_features)]
 
 //! This library acts as a toolbox on top of [FutureSDR][`futuresdr`] to easily build your own flowgraph.
