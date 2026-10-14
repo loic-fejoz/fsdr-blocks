@@ -16,7 +16,7 @@ use futuresdr::runtime::dev::prelude::*;
 /// let blk = FrequencyShifter::<Complex32>::new(freq as f32, sample_rate as f32);
 /// ```
 #[derive(Block)]
-#[message_inputs(set_frequency)]
+#[message_inputs(set_frequency, set_rate)]
 pub struct FrequencyShifter<
     A: Send + Sync + Default + Clone + Copy + std::fmt::Debug + 'static,
     I: CpuBufferReader<Item = A> = DefaultCpuReader<A>,
@@ -68,6 +68,25 @@ where
         };
         self.freq = freq;
         let rad_inc = 2.0 * core::f32::consts::PI * freq / self.sample_rate;
+        self.phase_inc = FixedPointPhase::new(rad_inc);
+        self.nco.set_freq(rad_inc);
+        Ok(Pmt::Ok)
+    }
+
+    async fn set_rate(
+        &mut self,
+        _io: &mut WorkIo,
+        _mio: &mut MessageOutputs,
+        _meta: &BlockMeta,
+        p: Pmt,
+    ) -> Result<Pmt> {
+        let rate = match p {
+            Pmt::F32(f) => f,
+            Pmt::F64(f) => f as f32,
+            _ => return Ok(Pmt::InvalidValue),
+        };
+        let rad_inc = 2.0 * core::f32::consts::PI * rate;
+        self.freq = rate * self.sample_rate;
         self.phase_inc = FixedPointPhase::new(rad_inc);
         self.nco.set_freq(rad_inc);
         Ok(Pmt::Ok)
