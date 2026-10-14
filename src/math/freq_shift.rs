@@ -69,6 +69,7 @@ where
         self.freq = freq;
         let rad_inc = 2.0 * core::f32::consts::PI * freq / self.sample_rate;
         self.phase_inc = FixedPointPhase::new(rad_inc);
+        self.nco.set_freq(rad_inc);
         Ok(Pmt::Ok)
     }
 }
